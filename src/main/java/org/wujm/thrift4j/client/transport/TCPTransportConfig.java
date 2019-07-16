@@ -13,6 +13,11 @@ public class TCPTransportConfig implements TransportConfig {
     private final int port;
     private final int timeout;
 
+    /**
+     * @param host    host
+     * @param port    port
+     * @param timeout timeout in milliseconds
+     */
     public TCPTransportConfig(String host, int port, int timeout) {
         this.host = host;
         this.port = port;

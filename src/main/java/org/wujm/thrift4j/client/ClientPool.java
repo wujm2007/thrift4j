@@ -2,9 +2,11 @@ package org.wujm.thrift4j.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.pool2.ObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.thrift.TApplicationException;
 import org.apache.thrift.TServiceClient;
 import org.apache.thrift.transport.TTransport;
+import org.wujm.thrift4j.client.transport.TransportConfig;
 import org.wujm.thrift4j.exception.ThriftException;
 
 import java.io.Closeable;
@@ -23,9 +25,9 @@ public class ClientPool<T extends TServiceClient> implements Closeable {
     private final Class<T> serviceClientClazz;
     private final Function<TTransport, T> clientFactory;
 
-    public ClientPool(ClientPoolConfig poolConfig, ObjectPool<TTransport> pool, Class<T> serviceClientClazz, Function<TTransport, T> clientFactory) {
+    public ClientPool(ClientPoolConfig poolConfig, TransportConfig transportConfig, Class<T> serviceClientClazz, Function<TTransport, T> clientFactory) {
         this.poolConfig = poolConfig;
-        this.pool = pool;
+        this.pool = new GenericObjectPool<>(new ConnectionFactory(transportConfig));
         this.serviceClientClazz = serviceClientClazz;
         this.clientFactory = clientFactory;
     }

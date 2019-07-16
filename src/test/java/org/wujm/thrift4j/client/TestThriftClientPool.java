@@ -1,7 +1,6 @@
 package org.wujm.thrift4j.client;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.server.TThreadPoolServer.Args;
@@ -10,10 +9,11 @@ import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TServerTransport;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.wujm.thrift4j.client.service.TestThriftService;
+import org.wujm.thrift4j.client.service.TestThriftServiceHandler;
 import org.wujm.thrift4j.client.transport.TCPTransportConfig;
 import org.wujm.thrift4j.client.transport.TransportConfig;
 
-import java.util.Calendar;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -22,12 +22,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public class TestThriftClientPool {
 
+    private static final int PORT = 9090;
+
+
     @BeforeClass
     public static void setUp() {
-        int port = 9090;
-
         try {
-            TServerTransport serverTransport = new TServerSocket(port);
+            TServerTransport serverTransport = new TServerSocket(PORT);
 
             Args processor = new TThreadPoolServer.Args(serverTransport)
                     .inputTransportFactory(new TFramedTransport.Factory())
@@ -47,33 +48,35 @@ public class TestThriftClientPool {
 
     @Test
     public void testEcho() throws InterruptedException {
-        Calendar down = Calendar.getInstance(), restart = Calendar.getInstance();
-        down.add(Calendar.SECOND, 5); // down after 5 secs
-        restart.add(Calendar.SECOND, 6); // restart after 6 secs
-
-        TransportConfig transportConfig = new TCPTransportConfig("127.0.0.1", 9090, 1);
+        TransportConfig transportConfig = new TCPTransportConfig("localhost", PORT, 100);
         ClientPoolConfig poolConfig = new ClientPoolConfig(3);
         ClientPool<TestThriftService.Client> pool = new ClientPool<>(
                 poolConfig,
-                new GenericObjectPool<>(new ConnectionFactory(transportConfig)),
+                transportConfig,
                 TestThriftService.Client.class,
                 transport -> new TestThriftService.Client(new TBinaryProtocol(new TFramedTransport(transport)))
         );
 
         ExecutorService executorService = Executors.newFixedThreadPool(10);
-        AtomicInteger expectedNotFail = new AtomicInteger();
+        AtomicInteger successCnt = new AtomicInteger();
+        AtomicInteger failCnt = new AtomicInteger();
 
-        for (int i = 0; i < 100; i++) {
+        int times = 100;
+
+        for (int i = 0; i < times; i++) {
             int counter = i;
-            Thread.sleep(100);
+            Thread.sleep(20);
             executorService.submit(() -> {
                 try {
                     TestThriftService.Iface client = pool.getClient();
-                    String response = client.echo("Hello " + counter + "!");
-                    log.info("[testEcho] {} get response: {}", client, response);
+                    String request = "Hello " + counter + "!";
+                    String response = client.echo(request);
+                    if (request.equals(response)) {
+                        successCnt.addAndGet(1);
+                    }
                 } catch (Throwable e) {
-                    expectedNotFail.addAndGet(1);
-                    log.error("[testEcho] get client fail", e);
+                    failCnt.addAndGet(1);
+                    log.error("Get client fail", e);
                 }
             });
         }
@@ -81,7 +84,8 @@ public class TestThriftClientPool {
         executorService.shutdown();
         executorService.awaitTermination(1, TimeUnit.MINUTES);
 
-        assert expectedNotFail.intValue() == 0;
+        assert successCnt.intValue() == times;
+        assert failCnt.intValue() == 0;
 
     }
 }

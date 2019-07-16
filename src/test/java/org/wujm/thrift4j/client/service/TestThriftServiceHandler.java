@@ -1,4 +1,4 @@
-package org.wujm.thrift4j.client;
+package org.wujm.thrift4j.client.service;
 
 public class TestThriftServiceHandler implements TestThriftService.Iface {
 

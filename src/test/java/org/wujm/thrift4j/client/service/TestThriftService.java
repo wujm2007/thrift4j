@@ -1,4 +1,4 @@
-package org.wujm.thrift4j.client;
+package org.wujm.thrift4j.client.service;
 
 
 import java.util.BitSet;

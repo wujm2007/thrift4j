@@ -14,6 +14,10 @@ public class HTTPTransportConfig implements TransportConfig {
     private final String url;
     private final int timeout;
 
+    /**
+     * @param url     url
+     * @param timeout timeout in milliseconds
+     */
     public HTTPTransportConfig(String url, int timeout) {
         this.url = url;
         this.timeout = timeout;
