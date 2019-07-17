@@ -8,7 +8,7 @@ import org.apache.thrift.transport.TTransport;
  * @author wujunmin
  */
 @Data
-public class TCPTransportConfig implements TransportConfig {
+public class TcpTransportConfig implements TransportConfig {
     private final String host;
     private final int port;
     private final int timeout;
@@ -18,7 +18,7 @@ public class TCPTransportConfig implements TransportConfig {
      * @param port    port
      * @param timeout timeout in milliseconds
      */
-    public TCPTransportConfig(String host, int port, int timeout) {
+    public TcpTransportConfig(String host, int port, int timeout) {
         this.host = host;
         this.port = port;
         this.timeout = timeout;

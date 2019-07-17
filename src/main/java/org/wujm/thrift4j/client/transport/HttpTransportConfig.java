@@ -9,7 +9,7 @@ import org.apache.thrift.transport.TTransportException;
  * @author wujunmin
  */
 @Data
-public class HTTPTransportConfig implements TransportConfig {
+public class HttpTransportConfig implements TransportConfig {
 
     private final String url;
     private final int timeout;
@@ -18,7 +18,7 @@ public class HTTPTransportConfig implements TransportConfig {
      * @param url     url
      * @param timeout timeout in milliseconds
      */
-    public HTTPTransportConfig(String url, int timeout) {
+    public HttpTransportConfig(String url, int timeout) {
         this.url = url;
         this.timeout = timeout;
     }

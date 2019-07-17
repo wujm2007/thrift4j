@@ -37,35 +37,33 @@ public class ClientPool<T extends TServiceClient> implements Closeable {
         //noinspection unchecked
         return (X) Proxy.newProxyInstance(serviceClientClazz.getClassLoader(), serviceClientClazz.getInterfaces(), (proxy, method, args) -> {
             int retryCount = 0;
+            int maxRetry = poolConfig.getRetry();
             while (true) {
                 TTransport transport = null;
                 try {
                     try {
                         transport = pool.borrowObject();
-                        log.debug("borrow {}", transport);
+                        log.debug("Borrow transport {}", transport);
                         T client = clientFactory.apply(transport);
                         return method.invoke(client, args);
                     } catch (InvocationTargetException e) {
                         Throwable targetExc = e.getTargetException();
-                        if (targetExc instanceof TApplicationException) {
-                            log.info("Backend throws exception", targetExc);
-                            throw targetExc;
-                        }
                         if (targetExc instanceof TTransportException) {
+                            log.debug("Invalidate transport " + transport, e);
                             pool.invalidateObject(transport);
                             transport = null;
                         }
                         log.warn("Invocation failed", e);
-                        throw new ThriftException("invoke fail", e.getTargetException());
+                        throw new ThriftException("Invocation failed", targetExc);
                     }
                 } catch (Exception e) {
                     if (e instanceof TApplicationException) {
                         throw e;
                     }
-                    if (retryCount < poolConfig.getRetry()) {
+                    if (retryCount < maxRetry) {
                         retryCount++;
                     } else {
-                        log.warn("Invocation failed after retried " + poolConfig.getRetry() + " times", e);
+                        log.warn("Invocation failed after retried " + maxRetry + " times", e);
                         if (e instanceof ThriftException) {
                             throw e.getCause();
                         } else {
