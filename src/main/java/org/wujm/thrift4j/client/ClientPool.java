@@ -6,6 +6,7 @@ import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.thrift.TApplicationException;
 import org.apache.thrift.TServiceClient;
 import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 import org.wujm.thrift4j.client.transport.TransportConfig;
 import org.wujm.thrift4j.exception.ThriftException;
 
@@ -41,6 +42,7 @@ public class ClientPool<T extends TServiceClient> implements Closeable {
                 try {
                     try {
                         transport = pool.borrowObject();
+                        log.debug("borrow {}", transport);
                         T client = clientFactory.apply(transport);
                         return method.invoke(client, args);
                     } catch (InvocationTargetException e) {
@@ -48,6 +50,10 @@ public class ClientPool<T extends TServiceClient> implements Closeable {
                         if (targetExc instanceof TApplicationException) {
                             log.info("Backend throws exception", targetExc);
                             throw targetExc;
+                        }
+                        if (targetExc instanceof TTransportException) {
+                            pool.invalidateObject(transport);
+                            transport = null;
                         }
                         log.warn("Invocation failed", e);
                         throw new ThriftException("invoke fail", e.getTargetException());
