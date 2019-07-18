@@ -6,12 +6,11 @@ import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TSimpleServer;
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TServerSocket;
-import org.apache.thrift.transport.TServerTransport;
 import org.apache.thrift.transport.TTransportException;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.wujm.thrift4j.client.service.TestThriftService;
-import org.wujm.thrift4j.client.service.TestThriftServiceHandler;
+import org.wujm.thrift4j.client.service.EchoService;
+import org.wujm.thrift4j.client.service.EchoServiceHandler;
 import org.wujm.thrift4j.client.transport.TcpTransportConfig;
 import org.wujm.thrift4j.client.transport.TransportConfig;
 
@@ -25,18 +24,18 @@ public class TestThriftClientPool {
 
     private static final int DEFAULT_SERVER_PORT = 9090;
 
-    private static TSimpleServer getServer(TestThriftService.Iface iface, TServerSocket serverTransport) {
+    private static TSimpleServer getServer(EchoService.Iface iface, TServerSocket serverTransport) {
         TServer.Args processor = new TSimpleServer.Args(serverTransport)
                 .inputTransportFactory(new TFramedTransport.Factory())
                 .outputTransportFactory(new TFramedTransport.Factory())
-                .processor(new TestThriftService.Processor<>(iface));
+                .processor(new EchoService.Processor<>(iface));
         return new TSimpleServer(processor);
     }
 
     @BeforeClass
     public static void setUpServer() throws InterruptedException, TTransportException {
         TServerSocket serverTransport = new TServerSocket(DEFAULT_SERVER_PORT);
-        new Thread(() -> getServer(new TestThriftServiceHandler.Handler0(), serverTransport).serve()).start();
+        new Thread(() -> getServer(new EchoServiceHandler.Handler0(), serverTransport).serve()).start();
         /* Wait for server to start */
         Thread.sleep(1000);
     }
@@ -45,11 +44,11 @@ public class TestThriftClientPool {
     public void testEcho() throws InterruptedException {
         TransportConfig transportConfig = new TcpTransportConfig("localhost", DEFAULT_SERVER_PORT, 200);
         ClientPoolConfig poolConfig = new ClientPoolConfig(3);
-        ClientPool<TestThriftService.Client> pool = new ClientPool<>(
+        ClientPool<EchoService.Client> pool = new ClientPool<>(
                 poolConfig,
                 transportConfig,
-                TestThriftService.Client.class,
-                transport -> new TestThriftService.Client(new TBinaryProtocol(new TFramedTransport(transport)))
+                EchoService.Client.class,
+                transport -> new EchoService.Client(new TBinaryProtocol(new TFramedTransport(transport)))
         );
 
         ExecutorService executorService = Executors.newFixedThreadPool(10);
@@ -62,7 +61,7 @@ public class TestThriftClientPool {
             Thread.sleep(20);
             executorService.submit(() -> {
                 try {
-                    TestThriftService.Iface client = pool.getClient();
+                    EchoService.Iface client = pool.getClient();
                     String request = "Hello " + counter + "!";
                     String response = client.echo(request);
                     if (request.equals(response)) {
@@ -87,7 +86,7 @@ public class TestThriftClientPool {
     public void testServerReset() throws InterruptedException, TTransportException {
         int serverPort = DEFAULT_SERVER_PORT + 1;
         TServerSocket serverTransport = new TServerSocket(serverPort);
-        TSimpleServer server = getServer(new TestThriftServiceHandler.Handler1(), serverTransport);
+        TSimpleServer server = getServer(new EchoServiceHandler.Handler1(), serverTransport);
 
         Thread serverThread1 = new Thread(() -> {
             log.info("Server 1 start");
@@ -97,11 +96,11 @@ public class TestThriftClientPool {
 
         TransportConfig transportConfig = new TcpTransportConfig("localhost", serverPort, 1000);
         ClientPoolConfig poolConfig = new ClientPoolConfig(3);
-        ClientPool<TestThriftService.Client> pool = new ClientPool<>(
+        ClientPool<EchoService.Client> pool = new ClientPool<>(
                 poolConfig,
                 transportConfig,
-                TestThriftService.Client.class,
-                transport -> new TestThriftService.Client(new TBinaryProtocol(new TFramedTransport(transport)))
+                EchoService.Client.class,
+                transport -> new EchoService.Client(new TBinaryProtocol(new TFramedTransport(transport)))
         );
 
         ExecutorService executorService = Executors.newFixedThreadPool(10);
@@ -114,7 +113,7 @@ public class TestThriftClientPool {
             executorService.submit(() -> {
                 try {
                     Thread.sleep((counter >= times / 2 ? counter + 50 : counter) * 100);
-                    TestThriftService.Iface client = pool.getClient();
+                    EchoService.Iface client = pool.getClient();
                     String request = "Hello " + counter + "!";
                     String response = client.echo(request);
                     log.info("Invoke success, {}", response);
@@ -135,7 +134,7 @@ public class TestThriftClientPool {
         TServerSocket newServerTransport = new TServerSocket(serverPort);
         new Thread(() -> {
             log.info("Server 2 start");
-            getServer(new TestThriftServiceHandler.Handler2(), newServerTransport).serve();
+            getServer(new EchoServiceHandler.Handler2(), newServerTransport).serve();
         }, "server-thread-2").start();
         log.info("New server started");
         Thread.sleep(4000);
