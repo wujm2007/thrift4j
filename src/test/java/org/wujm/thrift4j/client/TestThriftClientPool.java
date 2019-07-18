@@ -1,13 +1,16 @@
 package org.wujm.thrift4j.client;
 
+import io.vavr.control.Try;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.server.TServer;
 import org.apache.thrift.server.TSimpleServer;
+import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TTransportException;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.wujm.thrift4j.client.service.EchoService;
 import org.wujm.thrift4j.client.service.EchoServiceHandler;
@@ -35,26 +38,20 @@ public class TestThriftClientPool {
     @BeforeClass
     public static void setUpServer() throws InterruptedException, TTransportException {
         TServerSocket serverTransport = new TServerSocket(DEFAULT_SERVER_PORT);
-        new Thread(() -> getServer(new EchoServiceHandler.Handler0(), serverTransport).serve()).start();
+
+        TThreadPoolServer.Args processor = new TThreadPoolServer.Args(serverTransport)
+                .inputTransportFactory(new TFramedTransport.Factory())
+                .outputTransportFactory(new TFramedTransport.Factory())
+                .processor(new EchoService.Processor<>(new EchoServiceHandler.Handler0()));
+        TServer server = new TThreadPoolServer(processor);
+        new Thread(server::serve).start();
         /* Wait for server to start */
         Thread.sleep(1000);
     }
 
-    @Test
-    public void testEcho() throws InterruptedException {
-        TransportConfig transportConfig = new TcpTransportConfig("localhost", DEFAULT_SERVER_PORT, 200);
-        ClientPoolConfig poolConfig = new ClientPoolConfig(3);
-        ClientPool<EchoService.Client> pool = new ClientPool<>(
-                poolConfig,
-                transportConfig,
-                EchoService.Client.class,
-                transport -> new EchoService.Client(new TBinaryProtocol(new TFramedTransport(transport)))
-        );
-
-        ExecutorService executorService = Executors.newFixedThreadPool(10);
-        AtomicInteger successCnt = new AtomicInteger(), failCnt = new AtomicInteger();
-
-        int times = 100;
+    private int test(ClientPool<EchoService.Client> pool, int times, int threadPoolSize) throws InterruptedException {
+        ExecutorService executorService = Executors.newFixedThreadPool(threadPoolSize);
+        AtomicInteger successCnt = new AtomicInteger();
 
         for (int i = 0; i < times; i++) {
             int counter = i;
@@ -68,7 +65,6 @@ public class TestThriftClientPool {
                         successCnt.addAndGet(1);
                     }
                 } catch (Throwable e) {
-                    failCnt.addAndGet(1);
                     log.error("Get client fail", e);
                 }
             });
@@ -77,8 +73,55 @@ public class TestThriftClientPool {
         executorService.shutdown();
         executorService.awaitTermination(1, TimeUnit.MINUTES);
 
-        assert successCnt.intValue() == times;
-        assert failCnt.intValue() == 0;
+        return successCnt.intValue();
+    }
+
+
+    @Test
+    public void testValidator() throws InterruptedException {
+        TransportConfig transportConfig = new TcpTransportConfig("localhost", DEFAULT_SERVER_PORT, 200);
+        ClientPoolConfig poolConfig = new ClientPoolConfig(3);
+
+        ClientPool<EchoService.Client> badPool = ClientPool.<EchoService.Client>builder()
+                .poolConfig(poolConfig).transportConfig(transportConfig)
+                .serviceClientClazz(EchoService.Client.class)
+                .clientFactory(t -> new EchoService.Client(new TBinaryProtocol(new TFramedTransport(t))))
+                .validator(c -> Try.of(() -> c.echo("ping").equals("pong")).getOrElse(false))
+                .build();
+
+        ClientPool<EchoService.Client> goodPool = ClientPool.<EchoService.Client>builder()
+                .poolConfig(poolConfig).transportConfig(transportConfig)
+                .serviceClientClazz(EchoService.Client.class)
+                .clientFactory(t -> new EchoService.Client(new TBinaryProtocol(new TFramedTransport(t))))
+                .validator(c -> Try.of(() -> c.echo("ping").equals("ping")).getOrElse(false))
+                .build();
+
+        int times = 10;
+        int successCntBad = test(badPool, times, 3);
+        int successCntGood = test(goodPool, times, 3);
+
+        assert successCntBad == 0;
+        assert successCntGood == times;
+
+    }
+
+    @Test
+    public void testEcho() throws InterruptedException {
+        TransportConfig transportConfig = new TcpTransportConfig("localhost", DEFAULT_SERVER_PORT, 200);
+        ClientPoolConfig poolConfig = new ClientPoolConfig(3);
+        poolConfig.setMaxTotal(10);
+
+        ClientPool<EchoService.Client> pool = ClientPool.<EchoService.Client>builder()
+                .poolConfig(poolConfig).transportConfig(transportConfig)
+                .serviceClientClazz(EchoService.Client.class)
+                .clientFactory(t -> new EchoService.Client(new TBinaryProtocol(new TFramedTransport(t))))
+                .validator(c -> Try.of(() -> c.echo("ping").equals("ping")).getOrElse(false))
+                .build();
+
+        int times = 100;
+        int successCnt = test(pool, times, 10);
+
+        assert successCnt == times;
 
     }
 
@@ -100,7 +143,8 @@ public class TestThriftClientPool {
                 poolConfig,
                 transportConfig,
                 EchoService.Client.class,
-                transport -> new EchoService.Client(new TBinaryProtocol(new TFramedTransport(transport)))
+                transport -> new EchoService.Client(new TBinaryProtocol(new TFramedTransport(transport))),
+                c -> Try.of(() -> c.echo("ping")).isSuccess()
         );
 
         ExecutorService executorService = Executors.newFixedThreadPool(10);
@@ -131,6 +175,9 @@ public class TestThriftClientPool {
         Thread.sleep(1000);
         server.stop();
         log.info("Old server stopped");
+
+
+        /* Start a new server */
         TServerSocket newServerTransport = new TServerSocket(serverPort);
         new Thread(() -> {
             log.info("Server 2 start");
@@ -143,6 +190,46 @@ public class TestThriftClientPool {
 
         assert successCnt.intValue() == times;
         assert failCnt.intValue() == 0;
+
+    }
+
+
+    @Ignore
+    @Test
+    public void testExternalService() throws InterruptedException {
+        TransportConfig transportConfig = new TcpTransportConfig("localhost", 6000, 100);
+        ClientPoolConfig poolConfig = new ClientPoolConfig(3);
+        ClientPool<EchoService.Client> pool = new ClientPool<>(
+                poolConfig,
+                transportConfig,
+                EchoService.Client.class,
+                transport -> new EchoService.Client(new TBinaryProtocol(transport)),
+                c -> Try.of(() -> c.echo("ping").equals("ping")).getOrElse(false)
+        );
+
+        ExecutorService executorService = Executors.newFixedThreadPool(10);
+        AtomicInteger successCnt = new AtomicInteger(), failCnt = new AtomicInteger();
+
+        int times = 10000;
+
+        for (int i = 0; i < times; i++) {
+            int counter = i;
+            executorService.submit(() -> {
+                try {
+                    EchoService.Iface client = pool.getClient();
+                    String request = "Hello " + counter + "!";
+                    String response = client.echo(request);
+                    log.info("Invoke success, {}", response);
+                    successCnt.addAndGet(1);
+                } catch (Throwable e) {
+                    failCnt.addAndGet(1);
+                    log.error("Get client fail", e);
+                }
+            });
+        }
+
+        executorService.shutdown();
+        executorService.awaitTermination(30, TimeUnit.SECONDS);
 
     }
 }
