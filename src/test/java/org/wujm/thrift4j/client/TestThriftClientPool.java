@@ -14,7 +14,7 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.wujm.thrift4j.client.service.EchoService;
 import org.wujm.thrift4j.client.service.EchoServiceHandler;
-import org.wujm.thrift4j.client.transport.TcpTransportConfig;
+import org.wujm.thrift4j.client.transport.SocketTransportConfig;
 import org.wujm.thrift4j.client.transport.TransportConfig;
 
 import java.util.concurrent.ExecutorService;
@@ -79,7 +79,7 @@ public class TestThriftClientPool {
 
     @Test
     public void testValidator() throws InterruptedException {
-        TransportConfig transportConfig = new TcpTransportConfig("localhost", DEFAULT_SERVER_PORT, 200);
+        TransportConfig transportConfig = new SocketTransportConfig("localhost", DEFAULT_SERVER_PORT, 200);
         ClientPoolConfig poolConfig = new ClientPoolConfig(3);
 
         ClientPool<EchoService.Client> badPool = ClientPool.<EchoService.Client>builder()
@@ -107,7 +107,8 @@ public class TestThriftClientPool {
 
     @Test
     public void testEcho() throws InterruptedException {
-        TransportConfig transportConfig = new TcpTransportConfig("localhost", DEFAULT_SERVER_PORT, 200);
+        TransportConfig transportConfig = new SocketTransportConfig(
+                "localhost", DEFAULT_SERVER_PORT, 200);
         ClientPoolConfig poolConfig = new ClientPoolConfig(3);
         poolConfig.setMaxTotal(10);
 
@@ -137,7 +138,7 @@ public class TestThriftClientPool {
         }, "server-thread-1");
         serverThread1.start();
 
-        TransportConfig transportConfig = new TcpTransportConfig("localhost", serverPort, 1000);
+        TransportConfig transportConfig = new SocketTransportConfig("localhost", serverPort, 1000);
         ClientPoolConfig poolConfig = new ClientPoolConfig(3);
         ClientPool<EchoService.Client> pool = new ClientPool<>(
                 poolConfig,
@@ -197,7 +198,7 @@ public class TestThriftClientPool {
     @Ignore
     @Test
     public void testExternalService() throws InterruptedException {
-        TransportConfig transportConfig = new TcpTransportConfig("localhost", 6000, 100);
+        TransportConfig transportConfig = new SocketTransportConfig("localhost", 6000, 100);
         ClientPoolConfig poolConfig = new ClientPoolConfig(3);
         ClientPool<EchoService.Client> pool = new ClientPool<>(
                 poolConfig,
